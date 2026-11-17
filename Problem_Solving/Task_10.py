@@ -1,0 +1,2 @@
+name = "Rio"
+print(name)
