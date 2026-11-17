@@ -66,20 +66,26 @@ The repository is organized into three major modules representing a progressive 
 │   └── Mini_Project03.py               # Student Records Management CLI
 │
 ├── 25BTRAD089_Exp Learning/            # Capstone Experiential Learning Project
-│   └── SceneGraph_Production/          # SceneGraph AI Web Application
-│       ├── app.py                      # FastAPI REST API Backend
-│       ├── models.py                   # SQLAlchemy ORM Database Schemas
-│       ├── project_service.py          # Business logic & repository services
-│       ├── core/                       # Core algorithms (Parser, Scheduler, Graph)
-│       │   ├── parser.py               # Fountain screenplay parser
-│       │   ├── scheduler.py            # SciPy MILP production scheduling solver
-│       │   ├── continuity.py           # Prop & continuity checker
-│       │   ├── graph_engine.py         # Scene-character knowledge graph engine
-│       │   └── constraints.py          # Solver constraint rules
-│       ├── docs/                       # Static frontend assets (HTML/CSS/JS)
-│       ├── tests/                      # Automated test suite (Pytest)
-│       ├── requirements.txt            # Python dependencies
-│       └── render.yaml                 # Cloud deployment configuration
+│   └── SceneGraph_AI/                  # SceneGraph AI Web Application & Cloud Service
+│       ├── app.py                      # Root launcher & forwarder
+│       ├── Dockerfile                  # Production container definition
+│       ├── railway.json                # Railway deployment config
+│       ├── Procfile                    # Web process runner
+│       ├── requirements.txt            # Root dependencies
+│       └── SceneGraph_Production/      # Core Application Service
+│           ├── app.py                  # FastAPI REST API Backend
+│           ├── models.py               # SQLAlchemy ORM Database Schemas
+│           ├── project_service.py      # Business logic & repository services
+│           ├── core/                   # Core algorithms (Parser, Scheduler, Graph)
+│           │   ├── parser.py           # Fountain screenplay parser
+│           │   ├── scheduler.py        # SciPy MILP production scheduling solver
+│           │   ├── continuity.py       # Prop & continuity checker
+│           │   ├── graph_engine.py     # Scene-character knowledge graph engine
+│           │   └── constraints.py      # Solver constraint rules
+│           ├── docs/                   # Static frontend assets (HTML/CSS/JS)
+│           ├── tests/                  # Automated test suite (Pytest)
+│           ├── requirements.txt        # Backend dependencies
+│           └── render.yaml             # Render cloud deployment config
 │
 ├── .gitignore                          # Git ignore rules for Python, cache & secrets
 └── README.md                           # Main documentation
@@ -146,7 +152,7 @@ The repository is organized into three major modules representing a progressive 
 
 ## 3. Experiential Learning Project: SceneGraph AI
 
-Located in [`25BTRAD089_Exp Learning/SceneGraph_Production/`](25BTRAD089_Exp%20Learning/SceneGraph_Production/), **SceneGraph AI** is a production-grade full-stack platform designed for film pre-production, screenplay analysis, continuity verification, and filming schedule optimization.
+Located in [`25BTRAD089_Exp Learning/SceneGraph_AI/`](25BTRAD089_Exp%20Learning/SceneGraph_AI/), **SceneGraph AI** is a production-grade full-stack platform designed for film pre-production, screenplay analysis, continuity verification, and filming schedule optimization.
 
 ### Key Capabilities
 
@@ -156,6 +162,7 @@ Located in [`25BTRAD089_Exp Learning/SceneGraph_Production/`](25BTRAD089_Exp%20L
 - **MILP Production Scheduling**: Employs **SciPy MILP** (Mixed-Integer Linear Programming) optimization to build feasible, single-crew shooting schedules respecting actor availability, turnaround buffers, and location setups.
 - **Full-Stack Architecture**: Built with **FastAPI** backend, **SQLAlchemy** database layer, session-based authentication, and a responsive cinematic vanilla **HTML5/CSS3/JavaScript** frontend.
 - **Automated Testing Suite**: Full integration test coverage with `pytest` covering authentication, parser accuracy, graph generation, and scheduling solvers.
+- **Cloud & Container Readiness**: Packaged with Docker, Railway (`railway.json`), and Render (`render.yaml`) deployment configurations alongside cross-platform start scripts (`run_mac.sh`, `start.bat`).
 
 ### Architecture
 
@@ -182,7 +189,7 @@ Located in [`25BTRAD089_Exp Learning/SceneGraph_Production/`](25BTRAD089_Exp%20L
 
 1. Navigate to the project directory:
    ```bash
-   cd "25BTRAD089_Exp Learning/SceneGraph_Production"
+   cd "25BTRAD089_Exp Learning/SceneGraph_AI"
    ```
 2. Set up virtual environment and install dependencies:
    ```bash
@@ -193,8 +200,9 @@ Located in [`25BTRAD089_Exp Learning/SceneGraph_Production/`](25BTRAD089_Exp%20L
 3. Start the application:
    ```bash
    python3 start.py
-   # Or directly:
-   uvicorn app:app --reload --port 8000
+   # Or using platform runners:
+   ./run_mac.sh                 # On macOS / Linux
+   start.bat                    # On Windows
    ```
 4. Open `http://localhost:8000` in your browser.
 

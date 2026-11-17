@@ -3,13 +3,19 @@
 FastAPI serves the same frontend locally; GitHub Pages may host docs/ separately.
 """
 from __future__ import annotations
-import csv, hashlib, hmac, io, logging, os, re, secrets, smtplib, ssl, time
+import csv, hashlib, hmac, io, json, logging, os, re, secrets, smtplib, socket, ssl, subprocess, sys, time, urllib.request
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Annotated
+
+if __name__ == '__main__':
+    from start import main as _start_main
+    _start_main()
+    raise SystemExit(0)
+
 from fastapi import FastAPI, Request, Depends, HTTPException, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
@@ -19,7 +25,7 @@ from models import create_tables, SessionLocal, User, LoginSession, PhoneLogin, 
 from project_service import (create_project, list_projects, enriched, owned_project,
                              modify_scene, modify_cast, modify_settings,
                              add_metadata, add_event, remove_event, schedule, delete_project,
-                             modify_schedule_assignment, reestimate_scene_durations)
+                             modify_schedule_assignment, reestimate_scene_durations, update_shoot_progress)
 from core.experiments import run_experiments
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -46,7 +52,7 @@ load_environment_file()
 
 ALLOWED_ORIGINS = {s.strip().rstrip('/') for s in os.getenv('CORS_ORIGINS', '').split(',') if s.strip()}
 ALLOWED_ORIGINS.update({'http://localhost:8000', 'http://127.0.0.1:8000', 'http://localhost:5173', 'http://127.0.0.1:5173'})
-CORS_ORIGIN_REGEX = r'^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|[a-zA-Z0-9-]+\.(trycloudflare\.com|loca\.lt|ngrok-free\.app|ngrok\.io|pinggy\.link|lhr\.life|onrender\.com|github\.io))(:\d+)?$'
+CORS_ORIGIN_REGEX = r'^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|[a-zA-Z0-9-]+\.(trycloudflare\.com|loca\.lt|ngrok-free\.app|ngrok\.io|pinggy\.link|lhr\.life|onrender\.com|github\.io|railway\.app|up\.railway\.app))(:\d+)?$'
 SESSION_HOURS = 7 * 24
 
 @asynccontextmanager
@@ -78,7 +84,7 @@ async def headers_and_limits(request: Request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['X-Frame-Options'] = 'DENY'
-    if request.url.path.endswith('/app.js'):
+    if request.url.path.endswith(('/app.js', '/styles.css', '/index.html', '/')):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     elif request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
@@ -289,6 +295,67 @@ This code is valid for 10 minutes. If you did not request this code, you can saf
     logger.info("Dispatching OTP email to recipient=%s (from sender=%s via %s:%d, purpose=%s)",
                 recipient, sender, host, port, purpose)
 
+    # 1. Attempt HTTPS API delivery via Resend (Port 443 — never blocked by cloud firewalls)
+    resend_key = os.getenv('RESEND_API_KEY')
+    if resend_key:
+        try:
+            resend_from = os.getenv('RESEND_FROM') or from_addr or 'SceneGraph Studio <onboarding@resend.dev>'
+            if '<' in resend_from and 'resend.dev' not in resend_from and not os.getenv('RESEND_FROM'):
+                resend_from = 'SceneGraph Studio <onboarding@resend.dev>'
+            payload = json.dumps({
+                'from': resend_from,
+                'to': [recipient],
+                'subject': subject,
+                'html': html_content,
+                'text': plain_text,
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'https://api.resend.com/emails',
+                data=payload,
+                headers={
+                    'Authorization': f'Bearer {resend_key}',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'SceneGraphAI/2.0'
+                },
+                method='POST'
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if 200 <= resp.status < 300:
+                    logger.info("Successfully delivered OTP email to %s via Resend HTTPS API (Port 443)", recipient)
+                    return True
+        except Exception as ex:
+            logger.warning("Resend HTTPS API attempt to %s failed (%s); trying other providers...", recipient, ex)
+
+    # 2. Attempt HTTPS API delivery via Brevo / Sendinblue (Port 443 — free 300 emails/day, no domain required)
+    brevo_key = os.getenv('BREVO_API_KEY') or os.getenv('SENDINBLUE_API_KEY')
+    if brevo_key:
+        try:
+            payload = json.dumps({
+                'sender': {'name': 'SceneGraph Studio', 'email': sender},
+                'to': [{'email': recipient}],
+                'subject': subject,
+                'htmlContent': html_content,
+                'textContent': plain_text
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'https://api.brevo.com/v3/smtp/email',
+                data=payload,
+                headers={
+                    'api-key': brevo_key,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': 'SceneGraphAI/2.0'
+                },
+                method='POST'
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if 200 <= resp.status < 300:
+                    logger.info("Successfully delivered OTP email to %s via Brevo HTTPS API (Port 443)", recipient)
+                    return True
+        except Exception as ex:
+            logger.warning("Brevo HTTPS API attempt to %s failed (%s); trying direct SMTP...", recipient, ex)
+
+    # 3. Attempt direct SMTP delivery (works locally on Mac and on unblocked hosts)
     ctx = ssl.create_default_context()
     attempts = []
     if port == 465 or use_ssl:
@@ -304,11 +371,11 @@ This code is valid for 10 minutes. If you did not request this code, you can saf
     for mode, h, p in attempts:
         try:
             if mode == 'ssl':
-                with smtplib.SMTP_SSL(h, p, context=ctx, timeout=30) as server:
+                with smtplib.SMTP_SSL(h, p, context=ctx, timeout=3) as server:
                     server.login(sender, password)
                     server.send_message(msg, from_addr=sender, to_addrs=[recipient])
             else:
-                with smtplib.SMTP(h, p, timeout=30) as server:
+                with smtplib.SMTP(h, p, timeout=3) as server:
                     server.ehlo()
                     server.starttls(context=ctx)
                     server.ehlo()
@@ -317,14 +384,14 @@ This code is valid for 10 minutes. If you did not request this code, you can saf
             delivered = True
             logger.info("Successfully delivered OTP email to recipient=%s via %s %s:%d",
                         recipient, mode.upper(), h, p)
-            break
+            return True
         except Exception as ex:
             last_err = ex
-            logger.warning("SMTP dispatch attempt via %s %s:%d to %s failed: %s; trying next option...",
+            logger.warning("SMTP dispatch attempt via %s %s:%d to %s failed: %s",
                            mode.upper(), h, p, recipient, ex)
 
     if not delivered:
-        logger.error("Failed to deliver OTP email to %s after all SMTP attempts: %s", recipient, last_err, exc_info=True)
+        logger.error("Failed to deliver OTP email to %s after all SMTP attempts: %s", recipient, last_err)
         raise RuntimeError(f"SMTP delivery failed to {recipient}: {last_err}")
 
 
@@ -442,14 +509,29 @@ def send_email_otp_endpoint(payload: dict, request: Request, db: Session = Depen
     db.add(otp_record)
     db.commit()
 
+    delivered = False
+    delivery_err = None
     try:
-        send_email_otp(email, code, purpose)
+        ret = send_email_otp(email, code, purpose)
+        delivered = True if ret is not False else False
     except Exception as ex:
+        delivery_err = ex
+
+    if not delivered or delivery_err:
         db.execute(delete(EmailOtp).where(EmailOtp.id == otp_record.id))
         db.commit()
-        raise HTTPException(status_code=500, detail=f'Failed to dispatch email: {ex}')
+        err_str = str(delivery_err)
+        logger.error("Failed to send OTP to %s: %s", email, err_str)
+        if 'Network is unreachable' in err_str or 'timed out' in err_str:
+            detail = (
+                f"SMTP delivery failed: Cloud host blocked outbound port 587. "
+                f"Add BREVO_API_KEY to Railway variables or verify your domain on Resend."
+            )
+        else:
+            detail = f"Failed to dispatch email to {email}: {err_str}"
+        raise HTTPException(status_code=500, detail=detail)
 
-    return {'ok': True, 'message': f'Verification code sent to {email}. It is valid for 10 minutes.'}
+    return {'ok': True, 'message': f'Verification code sent to {email}. It is valid for 10 minutes. Check your inbox and spam folder.'}
 
 
 @app.post('/api/auth/email/verify-otp')
@@ -806,6 +888,13 @@ def schedule_assignment(payload: dict, db: Session = Depends(get_db), user: User
     return {'state': enriched(db, user.id, pid)}
 
 
+@app.post('/api/shoot-progress')
+def shoot_progress(payload: dict, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    pid = int(payload.get('project_id', 0))
+    cids = [int(x) for x in payload.get('completed_scenes', [])]
+    return {'state': data_or_error(update_shoot_progress, db, user.id, pid, cids)}
+
+
 @app.post('/api/benchmark')
 def benchmark(payload: dict, db: Session = Depends(get_db), user: User = Depends(require_user)):
     pid = int(payload.get('project_id', 0))
@@ -895,3 +984,5 @@ def assets(filename: str):
     if filename not in {'index.html', 'app.js', 'styles.css', 'favicon.svg', 'config.js'}:
         raise HTTPException(status_code=404)
     return FileResponse(FRONT / filename)
+
+

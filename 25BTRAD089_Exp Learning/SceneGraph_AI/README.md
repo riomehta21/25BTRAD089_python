@@ -126,5 +126,5 @@ Every student should understand the full flow and submit the complete repo link 
 This is a deployable educational application, **not an audited enterprise SaaS service**. It needs a configured managed PostgreSQL service, HTTPS (provided by the host), backups, migrations for future schema changes, stronger distributed rate limiting, password recovery/email verification, and production monitoring for broader public use. The temporary free databases of some hosts have expiry/data-retention limits. The development ZIP does **not** include an online database, credentials, or any invented live URL. Preserve secrets only in hosting environment variables.
 
 Fountain script format: https://fountain.io/syntax/ · GitHub Pages docs: https://docs.github.com/en/pages · Render FastAPI: https://render.com/docs/deploy-fastapi · Supabase Postgres connections: https://supabase.com/docs/guides/database/connecting-to-postgres
-#   S c e n e G r a p h - A I  
- 
+#
+# SceneGraph-AI
