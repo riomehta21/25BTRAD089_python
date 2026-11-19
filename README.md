@@ -66,6 +66,7 @@ The repository is organized into three major modules representing a progressive 
 │   └── Mini_Project03.py               # Student Records Management CLI
 │
 ├── 25BTRAD089_Exp Learning/            # Capstone Experiential Learning Project
+│   ├── Screenshorts/                   # Project UI & execution screenshots
 │   └── SceneGraph_AI/                  # SceneGraph AI Web Application & Cloud Service
 │       ├── app.py                      # Root launcher & forwarder
 │       ├── Dockerfile                  # Production container definition
